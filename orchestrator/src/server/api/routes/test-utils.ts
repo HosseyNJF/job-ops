@@ -50,6 +50,8 @@ vi.mock("@server/pipeline/index", () => {
     })),
     isPipelineCancelRequested: vi.fn(() => false),
     getPendingChallenges: vi.fn(() => []),
+    beginPipelineChallengeSolve: vi.fn(() => null),
+    skipPipelineChallengeSearch: vi.fn(() => ({ status: "not_found" })),
     resolvePipelineChallenge: vi.fn(() => ({ resolved: false, remaining: 0 })),
     subscribeToProgress: vi.fn((listener: (data: unknown) => void) => {
       listener(progress);

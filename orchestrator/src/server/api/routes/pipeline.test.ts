@@ -1066,6 +1066,42 @@ describe.sequential("Pipeline API routes", () => {
     expect(body.ok).toBe(false);
   });
 
+  it("rejects invalid skip requests and unknown challenges with the API contract", async () => {
+    const invalid = await fetch(
+      `${baseUrl}/api/pipeline/skip-challenge-search`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-request-id": "skip-invalid",
+        },
+        body: JSON.stringify({}),
+      },
+    );
+    expect(invalid.status).toBe(400);
+    expect(invalid.headers.get("x-request-id")).toBe("skip-invalid");
+    expect(await invalid.json()).toMatchObject({
+      ok: false,
+      error: { code: "INVALID_REQUEST" },
+      meta: { requestId: "skip-invalid" },
+    });
+
+    const missing = await fetch(
+      `${baseUrl}/api/pipeline/skip-challenge-search`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extractorId: "hiringcafe" }),
+      },
+    );
+    const missingBody = await missing.json();
+    expect(missing.status, JSON.stringify(missingBody)).toBe(404);
+    expect(missingBody).toMatchObject({
+      ok: false,
+      error: { code: "NOT_FOUND" },
+    });
+  });
+
   it("streams pipeline progress over SSE", async () => {
     const controller = new AbortController();
     const res = await fetch(`${baseUrl}/api/pipeline/progress`, {

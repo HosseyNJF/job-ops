@@ -16,6 +16,7 @@ import {
   getExtractorRegistry,
 } from "@server/extractors/registry";
 import {
+  beginPipelineChallengeSolve,
   getPendingChallenges,
   getPipelineStatus,
   getProgress,
@@ -23,6 +24,7 @@ import {
   resolvePipelineChallenge,
   resumePipelineScoring,
   runPipeline,
+  skipPipelineChallengeSearch,
   subscribeToProgress,
 } from "@server/pipeline/index";
 import * as pipelineRepo from "@server/repositories/pipeline";
@@ -798,6 +800,7 @@ const solveChallengeSchema = z.object({
 });
 
 pipelineRouter.post("/solve-challenge", async (req: Request, res: Response) => {
+  let finishSolve: (() => void) | null = null;
   try {
     const body = solveChallengeSchema.parse(req.body);
 
@@ -815,6 +818,10 @@ pipelineRouter.post("/solve-challenge", async (req: Request, res: Response) => {
     // source of truth — prevents solving a different URL than the one that
     // actually triggered the challenge.
     const challengeUrl = match.url;
+    finishSolve = beginPipelineChallengeSolve(body.extractorId);
+    if (!finishSolve) {
+      return fail(res, conflict("Challenge solve already in progress"));
+    }
 
     logger.info("Launching challenge solver", {
       route: "/api/pipeline/solve-challenge",
@@ -872,6 +879,45 @@ pipelineRouter.post("/solve-challenge", async (req: Request, res: Response) => {
         fail(res, serviceUnavailable(`Solver error: ${result.message}`));
       }
     }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return fail(res, badRequest(error.message, error.flatten()));
+    }
+    fail(
+      res,
+      new AppError({
+        status: 500,
+        code: "INTERNAL_ERROR",
+        message: error instanceof Error ? error.message : "Unknown error",
+      }),
+    );
+  } finally {
+    finishSolve?.();
+  }
+});
+
+pipelineRouter.post("/skip-challenge-search", (req: Request, res: Response) => {
+  try {
+    const body = solveChallengeSchema.parse(req.body);
+    const result = skipPipelineChallengeSearch(body.extractorId);
+    if (result.status === "not_found") {
+      return fail(res, notFound("No pending challenge for this extractor"));
+    }
+    if (result.status === "busy") {
+      return fail(res, conflict("Wait for the solve attempt to finish"));
+    }
+    if (result.status === "not_allowed") {
+      return fail(
+        res,
+        conflict("Try solving this Hiring Cafe search before skipping it"),
+      );
+    }
+    logger.info("Skipped challenged Hiring Cafe search", {
+      route: "/api/pipeline/skip-challenge-search",
+      extractorId: body.extractorId,
+      challengesRemaining: result.remaining,
+    });
+    ok(res, result);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return fail(res, badRequest(error.message, error.flatten()));

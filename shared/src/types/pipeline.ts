@@ -295,7 +295,9 @@ export interface PipelinePendingChallenge {
   extractorName: string;
   url: string;
   sources: ExtractorSourceId[];
-  /** Keep pausing for this source until its challenged detail page is retried. */
+  /** A Hiring Cafe search page can be skipped after a solve attempt. */
+  canSkipSearch?: boolean;
+  solveAttempted?: boolean;
 }
 
 export interface PipelineFanoutRoleProgress {

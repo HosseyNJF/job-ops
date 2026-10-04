@@ -155,6 +155,7 @@ export async function discoverJobsStep(args: {
   preserveFanout?: boolean;
   fanoutSeedJobs?: CreateJobInput[];
   retryChallengeUrls?: Record<string, string>;
+  skippedChallengeSearchStates?: string[];
   watchlistSelectedSourceIds?: string[] | null;
   shouldCancel?: () => boolean;
 }): Promise<{
@@ -330,6 +331,7 @@ export async function discoverJobsStep(args: {
           selectedCountry: getLegacyLocationSelection(locationIntent),
           cookieStorageDir: getPrivateCloudflareCookieStorageDir(),
           retryChallengeUrl: args.retryChallengeUrls?.[manifest.id],
+          skippedChallengeSearchStates: args.skippedChallengeSearchStates,
           locationIntent,
           sourceLocationPlan: getSourceLocationPlan(
             grouped.sources[0] as CrawlSource,

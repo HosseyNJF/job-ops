@@ -198,6 +198,63 @@ describe("runHiringCafe", () => {
     ).toContain("backend engineer");
   });
 
+  it("skips only the challenged search and continues with later terms", async () => {
+    let challengeSecondTerm = true;
+    const fetchedTerms: string[] = [];
+    const fetchMock = vi.fn((url: string) => {
+      const searchState = JSON.parse(
+        new URL(url).searchParams.get("searchState") ?? "{}",
+      ) as { searchQuery?: string };
+      const term = searchState.searchQuery ?? "";
+      fetchedTerms.push(term);
+      if (term === "backend engineer" && challengeSecondTerm) {
+        return Promise.resolve(
+          createTextResponse("<html>challenges.cloudflare.com</html>", {
+            ok: false,
+            status: 429,
+          }),
+        );
+      }
+      const id = term === "web developer" ? "job-1" : "job-3";
+      return Promise.resolve(
+        createTextResponse(
+          createSearchHtml([
+            createRawJob({
+              original_source_id: id,
+              apply_url: `https://example.com/apply/${id}`,
+            }),
+          ]),
+        ),
+      );
+    });
+    const options = {
+      searchTerms: ["web developer", "backend engineer", "data engineer"],
+      country: "worldwide",
+      maxJobsPerTerm: 1,
+      fetchImpl: fetchMock as typeof fetch,
+    };
+    const first = await runHiringCafe(options);
+    expect(first.jobs.map((job) => job.sourceJobId)).toEqual(["job-1"]);
+    const challengedState = new URL(
+      first.challengeRequired ?? "https://hiringcafe.com/",
+    ).searchParams.get("searchState");
+    expect(challengedState).toBeTruthy();
+
+    challengeSecondTerm = false;
+    fetchedTerms.length = 0;
+    const resumed = await runHiringCafe({
+      ...options,
+      skippedChallengeSearchStates: [challengedState ?? ""],
+    });
+    expect(resumed.success).toBe(true);
+    expect(resumed.challengeRequired).toBeUndefined();
+    expect(fetchedTerms).toEqual(["web developer", "data engineer"]);
+    expect(resumed.jobs.map((job) => job.sourceJobId)).toEqual([
+      "job-1",
+      "job-3",
+    ]);
+  });
+
   it("fetches rendered search pages and maps jobs without a browser", async () => {
     const fetchMock = vi
       .fn()

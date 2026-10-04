@@ -131,6 +131,100 @@ describe.sequential("pipeline challenge handling", () => {
     );
   });
 
+  it("allows skipping one Hiring Cafe search only after a solve attempt and retains earlier jobs", async () => {
+    const pipeline = await import("./orchestrator");
+    const steps = await import("./steps");
+    const { runWithRequestContext } = await import("@infra/request-context");
+    const searchState = JSON.stringify({ searchQuery: "backend engineer" });
+    const searchChallenge = {
+      extractorId: "hiringcafe",
+      extractorName: "Hiring Cafe",
+      url: `https://hiringcafe.com/?searchState=${encodeURIComponent(searchState)}`,
+      sources: ["hiringcafe" as const],
+    };
+    const earlierJob = {
+      source: "hiringcafe",
+      sourceJobId: "earlier",
+      title: "Web Developer",
+      employer: "Acme",
+      jobUrl: "https://hiringcafe.com/job/earlier",
+    };
+    const laterJob = {
+      ...earlierJob,
+      sourceJobId: "later",
+      title: "Data Engineer",
+      jobUrl: "https://hiringcafe.com/job/later",
+    };
+    vi.mocked(steps.discoverJobsStep)
+      .mockReset()
+      .mockResolvedValueOnce({
+        discoveredJobs: [earlierJob],
+        sourceErrors: [],
+        pendingChallenges: [searchChallenge],
+      })
+      .mockResolvedValueOnce({
+        discoveredJobs: [laterJob],
+        sourceErrors: [],
+        pendingChallenges: [],
+      });
+    const inTenantA = <T>(run: () => T) =>
+      runWithRequestContext(
+        { requestId: "request-a", tenantId: "tenant-a" },
+        run,
+      );
+    const inTenantB = <T>(run: () => T) =>
+      runWithRequestContext(
+        { requestId: "request-b", tenantId: "tenant-b" },
+        run,
+      );
+    const runPromise = inTenantA(() =>
+      pipeline.runPipeline({ sources: ["hiringcafe"] }),
+    );
+    await vi.waitFor(() => {
+      expect(inTenantA(() => pipeline.getPendingChallenges())).toEqual([
+        { ...searchChallenge, canSkipSearch: true, solveAttempted: false },
+      ]);
+    });
+    expect(
+      inTenantA(() => pipeline.skipPipelineChallengeSearch("hiringcafe")),
+    ).toEqual({
+      status: "not_allowed",
+    });
+    expect(
+      inTenantB(() => pipeline.skipPipelineChallengeSearch("hiringcafe")),
+    ).toEqual({
+      status: "not_found",
+    });
+    const finishSolve = inTenantA(() =>
+      pipeline.beginPipelineChallengeSolve("hiringcafe"),
+    );
+    expect(finishSolve).toBeTypeOf("function");
+    expect(
+      inTenantA(() => pipeline.skipPipelineChallengeSearch("hiringcafe")),
+    ).toEqual({
+      status: "busy",
+    });
+    expect(inTenantA(() => pipeline.getPendingChallenges()[0])).toMatchObject({
+      solveAttempted: true,
+    });
+    finishSolve?.();
+    expect(
+      inTenantA(() => pipeline.skipPipelineChallengeSearch("hiringcafe")),
+    ).toEqual({
+      status: "skipped",
+      remaining: 0,
+    });
+    await runPromise;
+    expect(vi.mocked(steps.discoverJobsStep)).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        skippedChallengeSearchStates: [searchState],
+      }),
+    );
+    expect(vi.mocked(steps.importJobsStep)).toHaveBeenCalledWith({
+      discoveredJobs: [earlierJob, laterJob],
+    });
+  });
+
   it("holds partial Hiring Cafe jobs until solve, retries the detail URL, and imports the enriched job", async () => {
     const pipeline = await import("./orchestrator");
     const steps = await import("./steps");

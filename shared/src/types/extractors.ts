@@ -38,6 +38,8 @@ export interface ExtractorRuntimeContext {
   cookieStorageDir?: string;
   /** Challenged URL from this run's earlier paused discovery attempt. */
   retryChallengeUrl?: string;
+  /** Search states skipped by the user while resolving Hiring Cafe challenges. */
+  skippedChallengeSearchStates?: string[];
   locationIntent?: LocationIntent;
   sourceLocationPlan?: SourceLocationPlan;
   getExistingJobUrls?: () => Promise<string[]>;

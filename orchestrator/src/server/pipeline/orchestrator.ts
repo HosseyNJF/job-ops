@@ -93,11 +93,14 @@ type TenantPipelineState = {
   activePipelineRunId: string | null;
   cancelRequestedAt: string | null;
   activeChallengeState: ChallengeState | null;
+  attemptedChallengeSearchStates: Set<string>;
+  skippedChallengeSearchStates: Set<string>;
   activeLlmConfigState: LlmConfigState | null;
 };
 
 type ChallengeState = {
   challenges: Map<string, PendingChallenge>;
+  solving: Set<string>;
   resolve: () => void;
 };
 
@@ -121,6 +124,8 @@ function getPipelineState(
       activePipelineRunId: null,
       cancelRequestedAt: null,
       activeChallengeState: null,
+      attemptedChallengeSearchStates: new Set(),
+      skippedChallengeSearchStates: new Set(),
       activeLlmConfigState: null,
     };
     pipelineStateByTenant.set(scopeKey, state);
@@ -178,6 +183,19 @@ async function resolveLocationIntent(
 // kills a running one. This is intentional: challenges happen at most once
 // per day per extractor, and the user is actively present to solve them.
 
+function hiringCafeSearchState(challenge: PendingChallenge): string | null {
+  if (challenge.extractorId !== "hiringcafe") return null;
+  try {
+    const url = new URL(challenge.url);
+    if (url.origin !== "https://hiringcafe.com" || url.pathname !== "/") {
+      return null;
+    }
+    return url.searchParams.get("searchState");
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Returns the list of challenges currently blocking the pipeline, or empty if
  * the pipeline is not paused on challenges.
@@ -186,6 +204,52 @@ export function getPendingChallenges(): PendingChallenge[] {
   const challengeState = getPipelineState().activeChallengeState;
   if (!challengeState) return [];
   return Array.from(challengeState.challenges.values());
+}
+
+/** Mark a browser solve attempt and prevent a concurrent skip. */
+export function beginPipelineChallengeSolve(
+  extractorId: string,
+): (() => void) | null {
+  const state = getPipelineState();
+  const challengeState = state.activeChallengeState;
+  const challenge = challengeState?.challenges.get(extractorId);
+  if (!challengeState || !challenge || challengeState.solving.has(extractorId))
+    return null;
+
+  challengeState.solving.add(extractorId);
+  const searchState = hiringCafeSearchState(challenge);
+  if (searchState) {
+    state.attemptedChallengeSearchStates.add(searchState);
+    challenge.solveAttempted = true;
+    progressHelpers.challengeRequired(
+      Array.from(challengeState.challenges.values()),
+    );
+  }
+
+  return () => challengeState.solving.delete(extractorId);
+}
+
+export function skipPipelineChallengeSearch(
+  extractorId: string,
+):
+  | { status: "skipped"; remaining: number }
+  | { status: "not_found" }
+  | { status: "not_allowed" }
+  | { status: "busy" } {
+  const state = getPipelineState();
+  const challengeState = state.activeChallengeState;
+  const challenge = challengeState?.challenges.get(extractorId);
+  if (!challengeState || !challenge) return { status: "not_found" };
+  if (challengeState.solving.has(extractorId)) return { status: "busy" };
+
+  const searchState = hiringCafeSearchState(challenge);
+  if (!searchState || !state.attemptedChallengeSearchStates.has(searchState)) {
+    return { status: "not_allowed" };
+  }
+
+  state.skippedChallengeSearchStates.add(searchState);
+  const { remaining } = resolvePipelineChallenge(extractorId);
+  return { status: "skipped", remaining };
 }
 
 /**
@@ -306,6 +370,8 @@ export async function runPipeline(
   tenantState.isRunning = true;
   tenantState.activePipelineRunId = "pending";
   tenantState.cancelRequestedAt = null;
+  tenantState.attemptedChallengeSearchStates.clear();
+  tenantState.skippedChallengeSearchStates.clear();
   resetProgress();
   const locationIntent = await resolveLocationIntent(config);
   const mergedConfig = { ...DEFAULT_CONFIG, ...config, locationIntent };
@@ -378,6 +444,17 @@ export async function runPipeline(
 
       // ---------- Challenge pause/resume ----------
       while (pendingChallenges.length > 0) {
+        pendingChallenges = pendingChallenges.map((challenge) => {
+          const searchState = hiringCafeSearchState(challenge);
+          return searchState
+            ? {
+                ...challenge,
+                canSkipSearch: true,
+                solveAttempted:
+                  tenantState.attemptedChallengeSearchStates.has(searchState),
+              }
+            : challenge;
+        });
         pipelineLogger.info("Challenges detected, pausing pipeline", {
           challenges: pendingChallenges.map((c) => ({
             extractorId: c.extractorId,
@@ -405,6 +482,7 @@ export async function runPipeline(
             challenges: new Map(
               pendingChallenges.map((c) => [c.extractorId, c]),
             ),
+            solving: new Set(),
             resolve,
           };
         });
@@ -424,6 +502,9 @@ export async function runPipeline(
           preserveFanout: true,
           fanoutSeedJobs: discoveredJobs,
           retryChallengeUrls,
+          skippedChallengeSearchStates: Array.from(
+            tenantState.skippedChallengeSearchStates,
+          ),
           shouldCancel: () =>
             getPipelineState(scopeKey).cancelRequestedAt !== null,
         });
@@ -614,6 +695,8 @@ export async function runPipeline(
       tenantState.activePipelineRunId = null;
       tenantState.cancelRequestedAt = null;
       tenantState.activeChallengeState = null;
+      tenantState.attemptedChallengeSearchStates.clear();
+      tenantState.skippedChallengeSearchStates.clear();
       tenantState.activeLlmConfigState = null;
       if (options?.hostedUsageReservationId) {
         await settleHostedUsageReservation({

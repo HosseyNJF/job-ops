@@ -160,6 +160,10 @@ through the active search term, location, and job board one value at a time.
   browser check and stays paused. Solve each challenge as it appears, or cancel
   the run. Collected jobs are held until all challenged sources finish and the
   run can import complete results.
+- After a **Solve** attempt on a Hiring Cafe search-page challenge, **Skip this
+  search** keeps jobs found so far and moves to the next Hiring Cafe search term
+  or location. It does not skip the whole source. The option does not appear for
+  job detail challenges.
 - An extractor that does not finish within 10 minutes is marked as failed. The
   remaining extractors continue instead of leaving the run stuck indefinitely.
 

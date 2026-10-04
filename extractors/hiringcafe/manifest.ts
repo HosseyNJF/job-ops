@@ -122,6 +122,7 @@ export const manifest: ExtractorManifest = {
       workplaceTypes: resolveContextWorkplaceTypes(context),
       maxJobsPerTerm,
       retryChallengeUrl: context.retryChallengeUrl,
+      skippedChallengeSearchStates: context.skippedChallengeSearchStates,
       cookieStorageDir: context.cookieStorageDir,
       shouldCancel: context.shouldCancel,
       onProgress: (event) => {

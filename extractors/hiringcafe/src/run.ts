@@ -105,6 +105,7 @@ export interface RunHiringCafeOptions {
   proximity?: LocationProximity;
   maxJobsPerTerm?: number;
   retryChallengeUrl?: string;
+  skippedChallengeSearchStates?: string[];
   cookieStorageDir?: string;
   fetchImpl?: typeof fetch;
   shouldCancel?: () => boolean;
@@ -796,6 +797,9 @@ export async function runHiringCafe(
   const jobs: CreateJobInput[] = [];
   const seen = new Set<string>();
   const sourceErrors: string[] = [];
+  const skippedSearchStates = new Set(
+    options.skippedChallengeSearchStates ?? [],
+  );
   let skipDetailEnrichment = false;
   let detailChallengeUrl: string | undefined;
 
@@ -864,6 +868,16 @@ export async function runHiringCafe(
           cityLocationContext,
           workplaceTypes,
         });
+        if (skippedSearchStates.has(JSON.stringify(searchState))) {
+          options.onProgress?.({
+            type: "term_complete",
+            termIndex,
+            termTotal,
+            searchTerm,
+            jobsFoundTerm: 0,
+          });
+          continue;
+        }
         let pageNo = 0;
         let termCollected = 0;
 

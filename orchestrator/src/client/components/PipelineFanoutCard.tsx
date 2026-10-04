@@ -164,7 +164,9 @@ export interface PipelineFanoutCardProps {
   currentCombination?: string;
   challenges?: PipelinePendingChallenge[];
   solvingExtractor: string | null;
+  skippingExtractor?: string | null;
   onSolveChallenge: (extractorId: string) => void;
+  onSkipChallengeSearch?: (extractorId: string) => void;
 }
 
 const formatElapsed = (seconds: number) =>
@@ -176,7 +178,9 @@ export const PipelineFanoutCard = ({
   currentCombination,
   challenges = [],
   solvingExtractor,
+  skippingExtractor = null,
   onSolveChallenge,
+  onSkipChallengeSearch,
 }: PipelineFanoutCardProps) => {
   const complete = fanout.roles.reduce((sum, role) => sum + role.complete, 0);
   const checks = fanout.roles.reduce((sum, role) => sum + role.check, 0);
@@ -294,11 +298,27 @@ export const PipelineFanoutCard = ({
           <PipelineActionRequired
             key={challenge.extractorId}
             title={challenge.extractorName}
-            description="Complete the browser check to continue this job board."
+            description={
+              challenge.canSkipSearch && challenge.solveAttempted
+                ? "Solve the browser check, or keep the jobs found so far and continue with the next search."
+                : "Complete the browser check to continue this job board."
+            }
             actionLabel="Solve"
             pendingLabel="Solving…"
             pending={solvingExtractor === challenge.extractorId}
             onAction={() => onSolveChallenge(challenge.extractorId)}
+            secondaryActionLabel={
+              challenge.canSkipSearch && challenge.solveAttempted
+                ? "Skip this search"
+                : undefined
+            }
+            secondaryPendingLabel="Skipping…"
+            secondaryPending={skippingExtractor === challenge.extractorId}
+            onSecondaryAction={
+              challenge.canSkipSearch && challenge.solveAttempted
+                ? () => onSkipChallengeSearch?.(challenge.extractorId)
+                : undefined
+            }
           />
         ))}
 
