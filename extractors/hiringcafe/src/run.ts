@@ -963,14 +963,22 @@ export async function runHiringCafe(
     return successfulResult();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    if (error instanceof HiringCafeChallengeError) {
+      const status = error.status ? ` (HTTP ${error.status})` : "";
+      return {
+        success: true,
+        jobs,
+        sourceErrors: [
+          ...sourceErrors,
+          `Hiring Cafe search request was challenged${status}; waiting for a solve before continuing.`,
+        ],
+        challengeRequired: error.challengeUrl,
+      };
+    }
     return {
       success: false,
       jobs: [],
       error: message,
-      challengeRequired:
-        error instanceof HiringCafeChallengeError
-          ? error.challengeUrl
-          : undefined,
     };
   }
 }

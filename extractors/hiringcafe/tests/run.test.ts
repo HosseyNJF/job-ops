@@ -164,6 +164,40 @@ describe("Hiring Cafe SSR parser", () => {
 });
 
 describe("runHiringCafe", () => {
+  it("keeps jobs from earlier search terms when a later search is challenged", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      const searchState = JSON.parse(
+        new URL(url).searchParams.get("searchState") ?? "{}",
+      ) as { searchQuery?: string };
+      return Promise.resolve(
+        searchState.searchQuery === "backend engineer"
+          ? createTextResponse("<html>challenges.cloudflare.com</html>", {
+              ok: false,
+              status: 429,
+            })
+          : createTextResponse(createSearchHtml([createRawJob()])),
+      );
+    });
+
+    const result = await runHiringCafe({
+      searchTerms: ["web developer", "backend engineer"],
+      country: "worldwide",
+      maxJobsPerTerm: 1,
+      fetchImpl: fetchMock as typeof fetch,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.jobs).toEqual([
+      expect.objectContaining({ sourceJobId: "job-1" }),
+    ]);
+    expect(result.sourceErrors).toEqual([expect.stringContaining("HTTP 429")]);
+    expect(
+      new URL(
+        result.challengeRequired ?? "https://hiringcafe.com/",
+      ).searchParams.get("searchState"),
+    ).toContain("backend engineer");
+  });
+
   it("fetches rendered search pages and maps jobs without a browser", async () => {
     const fetchMock = vi
       .fn()

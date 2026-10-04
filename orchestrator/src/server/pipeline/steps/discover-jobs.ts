@@ -408,7 +408,6 @@ export async function discoverJobsStep(args: {
                 extractorName: manifest.displayName || manifest.id,
                 url: result.challengeRequired,
                 sources: grouped.sources as ExtractorSourceId[],
-                pauseOnRepeat: true,
               }
             : undefined,
         };

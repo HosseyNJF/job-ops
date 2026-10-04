@@ -43,8 +43,9 @@ Defaults and constraints:
 - `worldwide` and `usa/ca` run in broad mode without a strict country location filter.
 - Hiring Cafe is enabled by default in source selection.
 - Full job descriptions are loaded from Hiring Cafe detail pages when the search result payload only includes summary fields.
-- If a job detail page is challenged, the extractor keeps all search results and pauses the pipeline for a human solve. After the solve, it retries the challenged detail URL and reruns Hiring Cafe before importing jobs. A source warning includes the upstream HTTP status when available. If another detail request is challenged, the pipeline pauses again and keeps the collected jobs until that challenge is resolved.
-- A challenge on a search page still requires the solver because search results cannot be collected from that page.
+- If a job detail page is challenged, the extractor keeps all search results and pauses the pipeline for a human solve. After the solve, it retries the challenged detail URL and reruns Hiring Cafe before importing jobs. A source warning includes the upstream HTTP status when available.
+- If a search page is challenged, results from earlier search terms are kept while the pipeline waits for a solve. The challenged page cannot supply new results until it is solved.
+- If another search or detail page is challenged during a retry, the pipeline shows the new challenge and pauses again. It imports the collected jobs only after Hiring Cafe finishes without another challenge. You can cancel the run while it is waiting.
 - The normalized job payload now preserves structured location evidence from the formatted workplace and city/state/country fields.
 - `HIRING_CAFE_DATE_FETCHED_PAST_N_DAYS` controls recency window when running extractor directly (default `7`).
 - In the default Map radius mode, Hiring Cafe receives the selected coordinates and radius directly (default `50` miles).
@@ -66,7 +67,7 @@ npm --workspace hiringcafe-extractor run start
 ### Hiring Cafe returns 429 / Vercel security checkpoint
 
 - If a detail request is challenged, solve the challenge in the offered browser. The pipeline keeps the listing results while paused, retries the detail URL afterward, and imports the richer description when the retry succeeds. Check the source warning for the HTTP status; a `429` usually means rate limiting. If a detail request remains challenged, the pipeline pauses again instead of importing partial descriptions.
-- If a search page is challenged, use the offered browser solver. The solve only succeeds when a reusable clearance cookie is saved. If no clearance cookie is issued, retry later.
+- If a search page is challenged, use the offered browser solver. The solve only succeeds when a reusable clearance cookie is saved. If no clearance cookie is issued, retry later. If a different search page is challenged after a solve, solve the new browser check; the same run stays active.
 
 ### Hiring Cafe does not appear in sources
 

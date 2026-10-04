@@ -62,10 +62,31 @@ describe.sequential("pipeline challenge handling", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("fails loudly when a solved challenge immediately reappears with no jobs", async () => {
+  it("asks again when a different search challenge appears after a solve", async () => {
     const pipeline = await import("./orchestrator");
     const pipelineRepo = await import("../repositories/pipeline");
     const steps = await import("./steps");
+    const nextChallenge = {
+      ...challenge,
+      url: "https://www.gradcracker.com/search/another-query",
+    };
+    vi.mocked(steps.discoverJobsStep)
+      .mockReset()
+      .mockResolvedValueOnce({
+        discoveredJobs: [],
+        sourceErrors: [],
+        pendingChallenges: [challenge],
+      })
+      .mockResolvedValueOnce({
+        discoveredJobs: [],
+        sourceErrors: [],
+        pendingChallenges: [nextChallenge],
+      })
+      .mockResolvedValueOnce({
+        discoveredJobs: [],
+        sourceErrors: [],
+        pendingChallenges: [],
+      });
 
     const runPromise = pipeline.runPipeline({
       sources: ["gradcracker"],
@@ -89,28 +110,24 @@ describe.sequential("pipeline challenge handling", () => {
       remaining: 0,
     });
 
-    const result = await runPromise;
-
-    expect(result).toEqual(
-      expect.objectContaining({
-        success: false,
-        jobsDiscovered: 0,
-        jobsProcessed: 0,
-        error: expect.stringContaining(
-          "still returned a Cloudflare challenge after the solve step",
-        ),
-      }),
-    );
+    await vi.waitFor(() => {
+      expect(pipeline.getPendingChallenges()).toEqual([nextChallenge]);
+    });
     expect(vi.mocked(steps.discoverJobsStep)).toHaveBeenCalledTimes(2);
     expect(vi.mocked(steps.importJobsStep)).not.toHaveBeenCalled();
-    expect(vi.mocked(pipelineRepo.updatePipelineRun)).toHaveBeenCalledWith(
+
+    expect(pipeline.resolvePipelineChallenge("gradcracker")).toEqual({
+      resolved: true,
+      remaining: 0,
+    });
+    const result = await runPromise;
+
+    expect(result).toMatchObject({ success: true, jobsDiscovered: 0 });
+    expect(vi.mocked(steps.discoverJobsStep)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(steps.importJobsStep)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(pipelineRepo.updatePipelineRun)).not.toHaveBeenCalledWith(
       "run-challenge-1",
-      expect.objectContaining({
-        status: "failed",
-        errorMessage: expect.stringContaining(
-          "still returned a Cloudflare challenge after the solve step",
-        ),
-      }),
+      expect.objectContaining({ status: "failed" }),
     );
   });
 
@@ -131,7 +148,6 @@ describe.sequential("pipeline challenge handling", () => {
       extractorName: "Hiring Cafe",
       url: "https://hiringcafe.com/job/req-1",
       sources: ["hiringcafe" as const],
-      pauseOnRepeat: true,
     };
     vi.mocked(steps.discoverJobsStep)
       .mockReset()
@@ -216,7 +232,6 @@ describe.sequential("pipeline challenge handling", () => {
       extractorName: "Hiring Cafe",
       url: "https://hiringcafe.com/job/req-1",
       sources: ["hiringcafe" as const],
-      pauseOnRepeat: true,
     };
     vi.mocked(steps.discoverJobsStep)
       .mockReset()
@@ -261,7 +276,7 @@ describe.sequential("pipeline challenge handling", () => {
     });
   });
 
-  it("fails an ordinary repeated challenge even when Hiring Cafe is also paused", async () => {
+  it("keeps both challenged sources paused and retains Hiring Cafe jobs", async () => {
     const pipeline = await import("./orchestrator");
     const steps = await import("./steps");
     const partialJob = {
@@ -277,7 +292,6 @@ describe.sequential("pipeline challenge handling", () => {
       extractorName: "Hiring Cafe",
       url: "https://hiringcafe.com/job/req-1",
       sources: ["hiringcafe" as const],
-      pauseOnRepeat: true,
     };
     vi.mocked(steps.discoverJobsStep)
       .mockReset()
@@ -290,6 +304,16 @@ describe.sequential("pipeline challenge handling", () => {
         discoveredJobs: [partialJob],
         sourceErrors: [],
         pendingChallenges: [detailChallenge, challenge],
+      })
+      .mockResolvedValueOnce({
+        discoveredJobs: [partialJob],
+        sourceErrors: [],
+        pendingChallenges: [challenge],
+      })
+      .mockResolvedValueOnce({
+        discoveredJobs: [],
+        sourceErrors: [],
+        pendingChallenges: [],
       });
 
     const runPromise = pipeline.runPipeline({
@@ -301,12 +325,27 @@ describe.sequential("pipeline challenge handling", () => {
     pipeline.resolvePipelineChallenge("hiringcafe");
     pipeline.resolvePipelineChallenge("gradcracker");
 
-    const result = await runPromise;
-    expect(result).toMatchObject({
-      success: false,
-      error: expect.stringContaining("Gradcracker still returned"),
+    await vi.waitFor(() => {
+      expect(pipeline.getPendingChallenges()).toEqual([
+        detailChallenge,
+        challenge,
+      ]);
     });
-    expect(vi.mocked(steps.discoverJobsStep)).toHaveBeenCalledTimes(2);
     expect(vi.mocked(steps.importJobsStep)).not.toHaveBeenCalled();
+    pipeline.resolvePipelineChallenge("hiringcafe");
+    pipeline.resolvePipelineChallenge("gradcracker");
+
+    await vi.waitFor(() => {
+      expect(pipeline.getPendingChallenges()).toEqual([challenge]);
+    });
+    expect(vi.mocked(steps.importJobsStep)).not.toHaveBeenCalled();
+    pipeline.resolvePipelineChallenge("gradcracker");
+
+    const result = await runPromise;
+    expect(result).toMatchObject({ success: true });
+    expect(vi.mocked(steps.discoverJobsStep)).toHaveBeenCalledTimes(4);
+    expect(vi.mocked(steps.importJobsStep)).toHaveBeenCalledWith({
+      discoveredJobs: [partialJob],
+    });
   });
 });

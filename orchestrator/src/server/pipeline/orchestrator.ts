@@ -244,23 +244,6 @@ function ensureNotCancelled(scopeKey = getPipelineScopeKey()): void {
   }
 }
 
-function buildRepeatedChallengeMessage(args: {
-  challenges: PendingChallenge[];
-  sourceErrors: string[];
-}): string {
-  const extractorNames =
-    args.challenges
-      .map((challenge) => challenge.extractorName || challenge.extractorId)
-      .filter(Boolean)
-      .join(", ") || "One or more extractors";
-  const sourceDetails =
-    args.sourceErrors.length > 0
-      ? ` Details: ${args.sourceErrors.join("; ")}`
-      : "";
-
-  return `${extractorNames} still returned a Cloudflare challenge after the solve step, so the pipeline stopped before importing incomplete jobs.${sourceDetails}`;
-}
-
 function mergeRetriedJobs(
   originalJobs: CreateJobInput[],
   retriedJobs: CreateJobInput[],
@@ -451,57 +434,17 @@ export async function runPipeline(
         );
         sourceErrors = [...sourceErrors, ...retryResult.sourceErrors];
 
-        // A partial extractor result must never be imported if the retry is
-        // still challenged. Other sources retain their existing partial-result
-        // behavior when the retry found useful jobs.
-        if (retryResult.pendingChallenges.length > 0) {
-          const detailChallenges = retryResult.pendingChallenges.filter(
-            (challenge) => challenge.pauseOnRepeat,
-          );
-          const ordinaryChallenges = retryResult.pendingChallenges.filter(
-            (challenge) => !challenge.pauseOnRepeat,
-          );
-          const unrecoveredOrdinary = ordinaryChallenges.filter(
-            (challenge) =>
-              !discoveredJobs.some((job) =>
-                challenge.sources.some((source) => source === job.source),
-              ),
-          );
-          if (unrecoveredOrdinary.length > 0) {
-            throw new Error(
-              buildRepeatedChallengeMessage({
-                challenges: unrecoveredOrdinary,
-                sourceErrors: retryResult.sourceErrors,
-              }),
-            );
-          }
-
-          if (ordinaryChallenges.length > 0) {
-            pipelineLogger.warn(
-              buildRepeatedChallengeMessage({
-                challenges: ordinaryChallenges,
-                sourceErrors: retryResult.sourceErrors,
-              }),
-              {
-                retryPendingChallenges: ordinaryChallenges.map(
-                  (challenge) => challenge.extractorId,
-                ),
-              },
-            );
-          }
-
-          pendingChallenges = detailChallenges;
-          if (detailChallenges.length > 0) {
-            pipelineLogger.warn("Detail challenge persists; pausing again", {
-              retryPendingChallenges: detailChallenges.map(
-                (c) => c.extractorId,
-              ),
-            });
-            continue;
-          }
-          break;
+        // Keep the run paused until every challenged source finishes a retry
+        // without another challenge. Jobs collected so far stay in memory and
+        // are imported only after discovery is complete.
+        pendingChallenges = retryResult.pendingChallenges;
+        if (pendingChallenges.length > 0) {
+          pipelineLogger.warn("Challenge persists; pausing again", {
+            retryPendingChallenges: pendingChallenges.map(
+              (challenge) => challenge.extractorId,
+            ),
+          });
         }
-        pendingChallenges = [];
       }
 
       progressHelpers.crawlingComplete(discoveredJobs.length);

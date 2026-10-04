@@ -134,7 +134,6 @@ describe("discoverJobsStep", () => {
       expect.objectContaining({
         extractorId: "hiringcafe",
         url: "https://hiringcafe.com/job/req-2",
-        pauseOnRepeat: true,
       }),
     ]);
     expect(hiringCafeFetch).toHaveBeenCalledWith(
