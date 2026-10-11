@@ -2,6 +2,7 @@
 name: build-and-push-ghcr
 
 on:
+  workflow_dispatch:
   push:
     tags: ["v*"]
 
@@ -41,8 +42,8 @@ jobs:
           tags: |
             type=ref,event=tag
             type=sha
-            # Optional: also publish :latest for version tags
-            type=raw,value=latest
+            # Publish :latest only for version tags, never manual test builds.
+            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
