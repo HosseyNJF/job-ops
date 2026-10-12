@@ -36,6 +36,12 @@ export interface ExtractorRuntimeContext {
   selectedCountry: string;
   /** Tenant-scoped directory for browser challenge cookies. */
   cookieStorageDir?: string;
+  /** Server-owned browser reader for Hiring Cafe's tenant-scoped session. */
+  browserPageReader?: (url: string) => Promise<{
+    status: number;
+    html: string;
+    challenged: boolean;
+  }>;
   /** Challenged URL from this run's earlier paused discovery attempt. */
   retryChallengeUrl?: string;
   /** Search states skipped by the user while resolving Hiring Cafe challenges. */

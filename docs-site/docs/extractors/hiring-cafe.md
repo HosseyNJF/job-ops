@@ -43,8 +43,9 @@ Defaults and constraints:
 - `worldwide` and `usa/ca` run in broad mode without a strict country location filter.
 - Hiring Cafe is enabled by default in source selection.
 - Full job descriptions are loaded from Hiring Cafe detail pages when the search result payload only includes summary fields.
-- If a job detail page is challenged, the extractor keeps all search results and pauses the pipeline for a human solve. After the solve, it retries the challenged detail URL and reruns Hiring Cafe before importing jobs. A source warning includes the upstream HTTP status when available.
-- If a search page is challenged, results from earlier search terms are kept while the pipeline waits for a solve. The challenged page cannot supply new results until it is solved.
+- Hiring Cafe reads its search and detail pages in Firefox from the start. If headless Firefox is challenged, it opens the same URL in the visible Firefox session. A normal page there continues the search automatically, even when no clearance cookie is issued.
+- If the visible Firefox page is challenged, the extractor keeps all search results and pauses the pipeline for a human solve on that same page. After the solve, it retries the challenged detail URL and reruns Hiring Cafe before importing jobs. A source warning includes the upstream HTTP status when available.
+- If a search page is challenged in visible Firefox, results from earlier search terms are kept while the pipeline waits for a solve. The challenged page cannot supply new results until it is solved.
 - After trying **Solve** on a challenged search page, **Skip this search** appears. It keeps jobs already found, skips that search term and location, and continues with the next Hiring Cafe search. Other Hiring Cafe searches still run. The button is not offered for a challenged job detail page.
 - If another search or detail page is challenged during a retry, the pipeline shows the new challenge and pauses again. It imports the collected jobs only after Hiring Cafe finishes without another challenge. You can cancel the run while it is waiting.
 - The normalized job payload now preserves structured location evidence from the formatted workplace and city/state/country fields.
@@ -67,8 +68,8 @@ npm --workspace hiringcafe-extractor run start
 
 ### Hiring Cafe returns 429 / Vercel security checkpoint
 
-- If a detail request is challenged, solve the challenge in the offered browser. The pipeline keeps the listing results while paused, retries the detail URL afterward, and imports the richer description when the retry succeeds. Check the source warning for the HTTP status; a `429` usually means rate limiting. If a detail request remains challenged, the pipeline pauses again instead of importing partial descriptions.
-- If a search page is challenged, use the offered browser solver. The solve only succeeds when a reusable clearance cookie is saved. If no clearance cookie is issued, retry later. If a different search page is challenged after a solve, solve the new browser check; the same run stays active.
+- If a detail request is challenged in the offered browser, complete the check there. The pipeline keeps the listing results while paused, retries the detail URL afterward, and imports the richer description when the retry succeeds. Check the source warning for the HTTP status; a `429` can mean rate limiting. If a detail request remains challenged, the pipeline pauses again instead of importing partial descriptions.
+- If a search page is challenged, use the offered browser. The solve succeeds when the same Firefox page loads usable Hiring Cafe data; a clearance cookie is not required. If a different search page is challenged later, solve the new browser check; the same run stays active.
 - If you cannot solve a challenged search page, try **Solve** once and then select **Skip this search**. Jobs collected before the challenge remain in the run; Hiring Cafe continues with the next term or location.
 
 ### Hiring Cafe does not appear in sources

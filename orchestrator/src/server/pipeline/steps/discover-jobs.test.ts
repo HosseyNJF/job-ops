@@ -13,6 +13,21 @@ vi.mock("impit", () => ({
   },
 }));
 
+vi.mock("@server/services/hiring-cafe-browser", () => ({
+  readHiringCafeBrowserPage: vi.fn(
+    async (_scope: string, _dir: string, url: string) => {
+      const response = await hiringCafeFetch(url, {});
+      const html = await response.text();
+      return {
+        status: response.status,
+        html,
+        challenged: !response.ok && html.includes("challenges.cloudflare.com"),
+      };
+    },
+  ),
+  closeHiringCafeBrowser: vi.fn(async () => undefined),
+}));
+
 vi.mock("@server/repositories/settings", () => ({
   getAllSettings: vi.fn(),
 }));

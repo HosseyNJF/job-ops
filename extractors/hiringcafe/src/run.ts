@@ -9,18 +9,13 @@ import {
   toNumberOrNull,
   toStringOrNull,
 } from "@shared/utils/type-conversion.js";
-import {
-  createPersistedFetchCookieJar,
-  getCloudflareCookieStorageDir,
-} from "browser-utils";
-import { Impit } from "impit";
+import type { HiringCafeBrowserPages } from "./browser-pages.js";
 import {
   type HiringCafeCountryLocation,
   resolveHiringCafeCountryLocation,
 } from "./country-map.js";
 import { createDefaultSearchState } from "./default-search-state.js";
 
-const EXTRACTOR_ID = "hiringcafe";
 // hiring.cafe now 308-redirects to hiringcafe.com; target it directly so
 // challenge cookies are solved and reused on the same domain.
 const BASE_URL = "https://hiringcafe.com/";
@@ -107,6 +102,7 @@ export interface RunHiringCafeOptions {
   retryChallengeUrl?: string;
   skippedChallengeSearchStates?: string[];
   cookieStorageDir?: string;
+  pageReader?: Pick<HiringCafeBrowserPages, "read">;
   fetchImpl?: typeof fetch;
   shouldCancel?: () => boolean;
   onProgress?: (event: HiringCafeProgressEvent) => void;
@@ -131,38 +127,6 @@ class HiringCafeChallengeError extends Error {
     this.challengeUrl = challengeUrl;
     this.status = status;
   }
-}
-
-/**
- * Default HTTP client: impit impersonates a real Firefox TLS fingerprint and
- * shares the persisted cookie jar (and User-Agent) written by the headed
- * challenge solver, so a solved cf_clearance/_vcrcs cookie is actually reused.
- */
-async function createDefaultFetchImpl(
-  cookieStorageDir?: string,
-): Promise<typeof fetch> {
-  const persistedCookies = await createPersistedFetchCookieJar(
-    EXTRACTOR_ID,
-    getCloudflareCookieStorageDir(cookieStorageDir),
-  );
-  const impit = new Impit({
-    browser: "firefox",
-    timeout: 30_000,
-    cookieJar: persistedCookies.cookieJar,
-    ...(persistedCookies.userAgent
-      ? { headers: { "user-agent": persistedCookies.userAgent } }
-      : {}),
-  });
-
-  // Impit enforces its own timeout and does not accept AbortSignal.
-  // ImpitResponse covers everything this extractor reads (ok/status/text).
-  return ((input: RequestInfo | URL, init?: RequestInit) => {
-    const { signal: _signal, ...rest } = init ?? {};
-    return impit.fetch(
-      typeof input === "string" ? input : input.toString(),
-      rest as Parameters<Impit["fetch"]>[1],
-    );
-  }) as unknown as typeof fetch;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -811,11 +775,28 @@ export async function runHiringCafe(
   });
 
   try {
+    const rawFetch = options.pageReader
+      ? ((async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = typeof input === "string" ? input : input.toString();
+          if (new URL(url).origin !== new URL(BASE_URL).origin) {
+            return (options.fetchImpl ?? fetch)(input, init);
+          }
+          const page = await options.pageReader?.read(url);
+          if (!page)
+            throw new Error("Hiring Cafe browser page was unavailable");
+          if (page.challenged) {
+            throw new HiringCafeChallengeError(url, page.status);
+          }
+          return new Response(page.html, { status: page.status || 502 });
+        }) as typeof fetch)
+      : options.fetchImpl;
+    if (!rawFetch) {
+      throw new Error("Hiring Cafe requires a Firefox page reader");
+    }
     const fetchImpl =
-      options.fetchImpl ??
-      withThrottleAndRetry(
-        await createDefaultFetchImpl(options.cookieStorageDir),
-      );
+      options.fetchImpl && !options.pageReader
+        ? rawFetch
+        : withThrottleAndRetry(rawFetch);
     const countryLocation = resolveHiringCafeCountryLocation(country);
     let retryRequisitionId: string | undefined;
     let retriedDetailJob: HiringCafeRawJob | null = null;

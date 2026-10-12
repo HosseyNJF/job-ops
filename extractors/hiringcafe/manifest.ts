@@ -124,6 +124,9 @@ export const manifest: ExtractorManifest = {
       retryChallengeUrl: context.retryChallengeUrl,
       skippedChallengeSearchStates: context.skippedChallengeSearchStates,
       cookieStorageDir: context.cookieStorageDir,
+      pageReader: context.browserPageReader
+        ? { read: context.browserPageReader }
+        : undefined,
       shouldCancel: context.shouldCancel,
       onProgress: (event) => {
         if (context.shouldCancel?.()) return;

@@ -164,6 +164,33 @@ describe("Hiring Cafe SSR parser", () => {
 });
 
 describe("runHiringCafe", () => {
+  it("uses browser page HTML for Hiring Cafe without an HTTP request", async () => {
+    const pageReader = {
+      read: vi.fn(async () => ({
+        status: 200,
+        html: createSearchHtml([createRawJob()]),
+        challenged: false,
+      })),
+    };
+    const fetchMock = vi.fn(async () => {
+      throw new Error("HTTP scraper must not read Hiring Cafe pages");
+    });
+
+    const result = await runHiringCafe({
+      searchTerms: ["web developer"],
+      country: "worldwide",
+      maxJobsPerTerm: 1,
+      pageReader,
+      fetchImpl: fetchMock as typeof fetch,
+    });
+
+    expect(result.jobs).toEqual([
+      expect.objectContaining({ sourceJobId: "job-1" }),
+    ]);
+    expect(pageReader.read).toHaveBeenCalledOnce();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("keeps jobs from earlier search terms when a later search is challenged", async () => {
     const fetchMock = vi.fn((url: string) => {
       const searchState = JSON.parse(

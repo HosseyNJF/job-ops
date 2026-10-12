@@ -1044,6 +1044,24 @@ describe.sequential("Pipeline API routes", () => {
     expect(ensureChallengeViewer).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps another workspace from starting a solve on a busy viewer", async () => {
+    const viewer = await import("@server/services/challenge-viewer");
+    vi.mocked(viewer.ensureChallengeViewer).mockResolvedValueOnce({
+      available: true,
+    });
+    vi.mocked(viewer.createChallengeViewerSession).mockReturnValueOnce(null);
+
+    const res = await fetch(`${baseUrl}/api/pipeline/challenge-viewer`, {
+      method: "POST",
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      error: { code: "CONFLICT" },
+    });
+  });
+
   it("rejects solve-challenge with invalid payload", async () => {
     const res = await fetch(`${baseUrl}/api/pipeline/solve-challenge`, {
       method: "POST",
@@ -1064,6 +1082,61 @@ describe.sequential("Pipeline API routes", () => {
     const body = await res.json();
     expect(res.status).toBe(404);
     expect(body.ok).toBe(false);
+  });
+
+  it("solves Hiring Cafe through its existing browser page without a cookie", async () => {
+    const pipeline = await import("@server/pipeline/index");
+    const browser = await import("@server/services/hiring-cafe-browser");
+    const viewer = await import("@server/services/challenge-viewer");
+    const url = "https://hiringcafe.com/job/req-1";
+    vi.mocked(pipeline.getPendingChallenges).mockReturnValueOnce([
+      {
+        extractorId: "hiringcafe",
+        extractorName: "Hiring Cafe",
+        url,
+        sources: ["hiringcafe"],
+      },
+    ]);
+    vi.mocked(pipeline.beginPipelineChallengeSolve).mockReturnValueOnce(
+      vi.fn(),
+    );
+    vi.mocked(pipeline.resolvePipelineChallenge).mockReturnValueOnce({
+      resolved: true,
+      remaining: 0,
+    });
+    vi.mocked(viewer.ensureChallengeViewer).mockResolvedValueOnce({
+      available: true,
+    });
+    vi.mocked(browser.hasHiringCafeBrowserChallenge)
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(true);
+    vi.mocked(browser.waitForHiringCafeBrowserChallenge).mockResolvedValueOnce(
+      "clear",
+    );
+
+    const res = await fetch(`${baseUrl}/api/pipeline/solve-challenge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ extractorId: "hiringcafe" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: true,
+      data: { status: "solved", cookiesSaved: 0 },
+    });
+    expect(browser.waitForHiringCafeBrowserChallenge).toHaveBeenCalledWith(
+      expect.any(String),
+      url,
+      5 * 60 * 1000,
+    );
+    expect(browser.hasHiringCafeBrowserChallenge).toHaveBeenCalledWith(
+      expect.any(String),
+      url,
+    );
+    expect(pipeline.resolvePipelineChallenge).toHaveBeenCalledWith(
+      "hiringcafe",
+    );
   });
 
   it("rejects invalid skip requests and unknown challenges with the API contract", async () => {
