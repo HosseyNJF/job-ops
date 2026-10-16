@@ -93,6 +93,39 @@ describe("PipelineFanoutCard", () => {
     expect(onSolveChallenge).toHaveBeenCalledWith("gradcracker");
   });
 
+  it("shows a pending browser check after all searches are complete", () => {
+    render(
+      <PipelineFanoutCard
+        fanout={{
+          ...fanout,
+          total: 1,
+          roles: [
+            { role: "Backend", complete: 1, running: 0, queued: 0, check: 0 },
+          ],
+        }}
+        elapsedSeconds={0}
+        currentCombination="hiringcafe · backend · amsterdam"
+        challenges={[
+          {
+            extractorId: "hiringcafe",
+            extractorName: "Hiring Cafe",
+            url: "https://hiringcafe.com/job/req-1",
+            sources: ["hiringcafe"],
+          },
+        ]}
+        solvingExtractor={null}
+        onSolveChallenge={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Browser check needed")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Searching hiringcafe for “backend” in amsterdam"),
+    ).toBeNull();
+    const searchCount = screen.getByText("search complete").parentElement;
+    expect(searchCount?.firstElementChild).toHaveTextContent("1");
+  });
+
   it("shows skip for a Hiring Cafe search only after a solve attempt", () => {
     const onSkipChallengeSearch = vi.fn();
     const searchChallenge = {

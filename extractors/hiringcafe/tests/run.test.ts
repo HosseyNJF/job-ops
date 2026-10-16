@@ -713,6 +713,7 @@ describe("runHiringCafe", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "https://hiringcafe.com/job/req-old",
     );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({
       success: true,
       jobs: [
@@ -723,6 +724,40 @@ describe("runHiringCafe", () => {
       ],
     });
     expect(result.challengeRequired).toBeUndefined();
+  });
+
+  it("retries a browser-reported 429 before asking for a search challenge", async () => {
+    vi.useFakeTimers();
+    try {
+      let reads = 0;
+      const pageReader = {
+        read: vi.fn(async () => {
+          reads += 1;
+          return reads === 1
+            ? {
+                status: 429,
+                html: "<html>Just a moment...</html>",
+                challenged: true,
+              }
+            : { status: 200, html: createSearchHtml([]), challenged: false };
+        }),
+      };
+
+      const run = runHiringCafe({
+        searchTerms: ["web developer"],
+        country: "worldwide",
+        maxJobsPerTerm: 1,
+        pageReader,
+      });
+      await vi.runAllTimersAsync();
+      const result = await run;
+
+      expect(result.success).toBe(true);
+      expect(result.challengeRequired).toBeUndefined();
+      expect(pageReader.read).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("falls back to the search hit when enrichment finds an expired job", async () => {

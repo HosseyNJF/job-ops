@@ -2,6 +2,7 @@ import {
   createLaunchOptions,
   isChallengePage,
   loadCookies,
+  readPageContentIfReady,
   saveCookies,
 } from "browser-utils";
 import {
@@ -127,7 +128,11 @@ export class HiringCafeBrowserPages {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (!(await isChallengePage(this.page))) {
-        const html = await this.page.content();
+        const html = await readPageContentIfReady(this.page);
+        if (html === null) {
+          await this.page.waitForTimeout(1_000);
+          continue;
+        }
         let parseable = false;
         try {
           const json = html.match(

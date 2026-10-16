@@ -203,7 +203,11 @@ export const PipelineFanoutCard = ({
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2 @lg/fanout:flex-row @lg/fanout:items-start @lg/fanout:justify-between">
             <CardTitle className="min-w-0 text-2xl tracking-tight">
-              {currentCombination ? (
+              {challenges.length > 0 ? (
+                "Browser check needed"
+              ) : complete === fanout.total ? (
+                "Finishing discovery"
+              ) : currentCombination ? (
                 <LiveSearchTitle text={currentCombination} />
               ) : (
                 "Searching jobs"
@@ -233,7 +237,11 @@ export const PipelineFanoutCard = ({
                   {complete}
                 </span>
                 <span className="font-sans text-muted-foreground">
-                  complete
+                  {challenges.length > 0
+                    ? complete === 1
+                      ? "search complete"
+                      : "searches complete"
+                    : "complete"}
                 </span>
               </span>
               <span className="text-muted-foreground/50">·</span>

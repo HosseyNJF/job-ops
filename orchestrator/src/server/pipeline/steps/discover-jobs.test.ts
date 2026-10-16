@@ -249,8 +249,9 @@ describe("discoverJobsStep", () => {
     expect(hiringCafeFetch.mock.calls[0]?.[0]).toBe(
       "https://hiringcafe.com/job/req-2",
     );
+    expect(hiringCafeFetch).toHaveBeenCalledTimes(1);
     expect(retryResult.pendingChallenges).toEqual([]);
-    expect(retryResult.discoveredJobs).toHaveLength(3);
+    expect(retryResult.discoveredJobs).toHaveLength(1);
     expect(retryResult.discoveredJobs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

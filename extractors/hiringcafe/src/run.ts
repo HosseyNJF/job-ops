@@ -155,17 +155,30 @@ function sleep(ms: number): Promise<void> {
 function withThrottleAndRetry(fetchImpl: typeof fetch): typeof fetch {
   let lastRequestAt = 0;
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const wait = lastRequestAt + REQUEST_DELAY_MS - Date.now();
-    if (wait > 0) await sleep(wait);
-    let response = await fetchImpl(input, init);
-    lastRequestAt = Date.now();
-    for (const delay of RATE_LIMIT_RETRY_DELAYS_MS) {
-      if (response.status !== 429) break;
-      await sleep(delay);
-      response = await fetchImpl(input, init);
-      lastRequestAt = Date.now();
+    for (let attempt = 0; ; attempt += 1) {
+      const wait = lastRequestAt + REQUEST_DELAY_MS - Date.now();
+      if (wait > 0) await sleep(wait);
+      try {
+        const response = await fetchImpl(input, init);
+        lastRequestAt = Date.now();
+        if (
+          response.status !== 429 ||
+          attempt >= RATE_LIMIT_RETRY_DELAYS_MS.length
+        ) {
+          return response;
+        }
+      } catch (error) {
+        lastRequestAt = Date.now();
+        if (
+          !(error instanceof HiringCafeChallengeError) ||
+          error.status !== 429 ||
+          attempt >= RATE_LIMIT_RETRY_DELAYS_MS.length
+        ) {
+          throw error;
+        }
+      }
+      await sleep(RATE_LIMIT_RETRY_DELAYS_MS[attempt]);
     }
-    return response;
   }) as typeof fetch;
 }
 
@@ -856,6 +869,16 @@ export async function runHiringCafe(
       }
     }
     let retriedDetailApplied = false;
+
+    // A detail challenge is reported only after the search terms have finished.
+    // The pipeline already holds their jobs; this retry only needs the detail.
+    if (retryRequisitionId && !options.searchResume) {
+      const mapped = retriedDetailJob
+        ? mapHiringCafeJob(retriedDetailJob)
+        : null;
+      if (mapped) jobs.push(mapped);
+      return successfulResult();
+    }
 
     for (let runIndex = 0; runIndex < runLocations.length; runIndex += 1) {
       if (options.shouldCancel?.()) return successfulResult();

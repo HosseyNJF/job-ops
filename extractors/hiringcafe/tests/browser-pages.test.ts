@@ -108,4 +108,30 @@ describe("HiringCafeBrowserPages", () => {
     expect(await pages.waitForChallenge(url, 5_000)).toBe("clear");
     await pages.close();
   });
+
+  it("keeps waiting when the solved page is still navigating", async () => {
+    const challenge = "<html>Just a moment...</html>";
+    const clear =
+      '<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"ssrHits":[]}}}</script>';
+    fixture.headedPage.content
+      .mockResolvedValueOnce(challenge)
+      .mockResolvedValueOnce(challenge)
+      .mockResolvedValueOnce(clear)
+      .mockRejectedValueOnce(
+        new Error(
+          "page.content: Unable to retrieve content because the page is navigating and changing the content.",
+        ),
+      )
+      .mockResolvedValueOnce(clear)
+      .mockResolvedValueOnce(clear);
+    const pages = new HiringCafeBrowserPages({
+      cookieStorageDir: "/tmp/hiringcafe-browser-test",
+      promoteToHeaded: async () => ({ release: () => undefined }),
+    });
+    const url = "https://hiringcafe.com/?searchState=test";
+
+    expect((await pages.read(url)).challenged).toBe(true);
+    expect(await pages.waitForChallenge(url, 5_000)).toBe("clear");
+    await pages.close();
+  });
 });
