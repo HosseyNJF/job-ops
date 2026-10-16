@@ -73,6 +73,10 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
         viewerWindow?.close();
       }
       await solvePipelineChallenge(extractorId);
+      if (viewerWindow && !viewerWindow.closed) {
+        viewerWindow.location.href = "/challenge-viewer/solved";
+        window.setTimeout(() => viewerWindow.close(), 3_000);
+      }
     } catch (error) {
       viewerWindow?.close();
       showErrorToast(error, "Failed to solve challenge");

@@ -1044,6 +1044,17 @@ describe.sequential("Pipeline API routes", () => {
     expect(ensureChallengeViewer).toHaveBeenCalledTimes(1);
   });
 
+  it("serves a persistent completion page after the viewer disconnects", async () => {
+    const res = await fetch(`${baseUrl}/challenge-viewer/solved`);
+    const html = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(html).toContain("Challenge solved");
+    expect(html).toContain("return to Job Ops");
+    expect(html).not.toContain("websockify");
+  });
+
   it("keeps another workspace from starting a solve on a busy viewer", async () => {
     const viewer = await import("@server/services/challenge-viewer");
     vi.mocked(viewer.ensureChallengeViewer).mockResolvedValueOnce({
