@@ -162,6 +162,7 @@ export async function discoverJobsStep(args: {
   preserveFanout?: boolean;
   fanoutSeedJobs?: CreateJobInput[];
   retryChallengeUrls?: Record<string, string>;
+  resumeStates?: Record<string, unknown>;
   skippedChallengeSearchStates?: string[];
   watchlistSelectedSourceIds?: string[] | null;
   shouldCancel?: () => boolean;
@@ -352,6 +353,7 @@ export async function discoverJobsStep(args: {
                   )
               : undefined,
           retryChallengeUrl: args.retryChallengeUrls?.[manifest.id],
+          resumeState: args.resumeStates?.[manifest.id],
           skippedChallengeSearchStates: args.skippedChallengeSearchStates,
           locationIntent,
           sourceLocationPlan: getSourceLocationPlan(
@@ -425,6 +427,7 @@ export async function discoverJobsStep(args: {
                   extractorId: manifest.id,
                   extractorName: manifest.displayName || manifest.id,
                   url: result.challengeRequired,
+                  resumeState: result.resumeState,
                   sources: grouped.sources as ExtractorSourceId[],
                 }
               : undefined,
@@ -439,6 +442,7 @@ export async function discoverJobsStep(args: {
                 extractorId: manifest.id,
                 extractorName: manifest.displayName || manifest.id,
                 url: result.challengeRequired,
+                resumeState: result.resumeState,
                 sources: grouped.sources as ExtractorSourceId[],
               }
             : undefined,

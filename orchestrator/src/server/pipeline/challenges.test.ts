@@ -8,6 +8,7 @@ const challenge = {
   extractorName: "Gradcracker",
   url: "https://www.gradcracker.com/search/computing-technology/software-developer-graduate-jobs-in-london-and-south-east?order=dateAdded",
   sources: ["gradcracker" as const],
+  resumeState: { cursor: "page-2" },
 };
 
 vi.mock("../repositories/pipeline", () => ({
@@ -114,6 +115,12 @@ describe.sequential("pipeline challenge handling", () => {
       expect(pipeline.getPendingChallenges()).toEqual([nextChallenge]);
     });
     expect(vi.mocked(steps.discoverJobsStep)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(steps.discoverJobsStep)).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        resumeStates: { gradcracker: { cursor: "page-2" } },
+      }),
+    );
     expect(vi.mocked(steps.importJobsStep)).not.toHaveBeenCalled();
 
     expect(pipeline.resolvePipelineChallenge("gradcracker")).toEqual({
@@ -141,6 +148,16 @@ describe.sequential("pipeline challenge handling", () => {
       extractorName: "Hiring Cafe",
       url: `https://hiringcafe.com/?searchState=${encodeURIComponent(searchState)}`,
       sources: ["hiringcafe" as const],
+      resumeState: {
+        locationIndex: 0,
+        termIndex: 0,
+        location: "Amsterdam",
+        searchTerm: "backend engineer",
+        pageNo: 2,
+        termCollected: 40,
+        searchState,
+        seenKeys: ["earlier"],
+      },
     };
     const earlierJob = {
       source: "hiringcafe",
@@ -218,6 +235,7 @@ describe.sequential("pipeline challenge handling", () => {
     expect(vi.mocked(steps.discoverJobsStep)).toHaveBeenLastCalledWith(
       expect.objectContaining({
         skippedChallengeSearchStates: [searchState],
+        resumeStates: { hiringcafe: searchChallenge.resumeState },
       }),
     );
     expect(vi.mocked(steps.importJobsStep)).toHaveBeenCalledWith({

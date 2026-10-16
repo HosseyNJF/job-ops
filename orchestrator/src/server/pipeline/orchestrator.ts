@@ -476,6 +476,13 @@ export async function runPipeline(
             challenge.url,
           ]),
         );
+        const resumeStates = Object.fromEntries(
+          pendingChallenges.flatMap((challenge) =>
+            challenge.resumeState !== undefined
+              ? [[challenge.extractorId, challenge.resumeState]]
+              : [],
+          ),
+        );
 
         await new Promise<void>((resolve) => {
           tenantState.activeChallengeState = {
@@ -502,6 +509,7 @@ export async function runPipeline(
           preserveFanout: true,
           fanoutSeedJobs: discoveredJobs,
           retryChallengeUrls,
+          resumeStates,
           skippedChallengeSearchStates: Array.from(
             tenantState.skippedChallengeSearchStates,
           ),

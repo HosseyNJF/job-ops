@@ -295,6 +295,8 @@ export interface PipelinePendingChallenge {
   extractorName: string;
   url: string;
   sources: ExtractorSourceId[];
+  /** Opaque extractor checkpoint returned on a challenge retry. */
+  resumeState?: unknown;
   /** A Hiring Cafe search page can be skipped after a solve attempt. */
   canSkipSearch?: boolean;
   solveAttempted?: boolean;
