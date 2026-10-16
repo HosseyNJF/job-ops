@@ -49,6 +49,7 @@ Defaults and constraints:
 - If a search page is challenged in visible Firefox, results already found are kept while the pipeline waits for a solve. After the solve, Hiring Cafe retries that page with the same term and location, then continues to later pages and searches. That search retry does not replay earlier pages. A separate job-detail challenge can still trigger a rerun to enrich descriptions. The challenged search page cannot supply new results until it is solved.
 - After trying **Solve** on a challenged search page, **Skip this search** appears. It keeps jobs already found, skips that search term and location, and continues with the next Hiring Cafe search. Other Hiring Cafe searches still run. The button is not offered for a challenged job detail page.
 - If another search or detail page is challenged during a retry, the pipeline shows the new challenge and pauses again. It imports the collected jobs only after Hiring Cafe finishes without another challenge. You can cancel the run while it is waiting.
+- In the pipeline progress card, searches completed before a later challenge stay complete while the challenged search waits and retries. Searches that have not started remain queued.
 - The normalized job payload now preserves structured location evidence from the formatted workplace and city/state/country fields.
 - `HIRING_CAFE_DATE_FETCHED_PAST_N_DAYS` controls recency window when running extractor directly (default `7`).
 - In the default Map radius mode, Hiring Cafe receives the selected coordinates and radius directly (default `50` miles).
